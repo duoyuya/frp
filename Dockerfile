@@ -1,0 +1,42 @@
+# Build stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production=false
+COPY . .
+RUN npm run build
+
+# Production stage
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Install FRP
+ARG FRP_VERSION=0.58.1
+RUN apk add --no-cache curl && \
+    curl -fsSL https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz | tar xz && \
+    mv frp_${FRP_VERSION}_linux_amd64/frps /usr/local/bin/ && \
+    rm -rf frp_${FRP_VERSION}_linux_amd64 && \
+    apk del curl
+
+# Copy built files
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production && npm cache clean --force
+
+# Create directories
+RUN mkdir -p /app/data /app/frp
+
+# Copy startup script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+EXPOSE 3000 7000 7500
+
+VOLUME ["/app/data", "/app/frp"]
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["node", "server/index.js"]
