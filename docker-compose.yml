@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   frp-panel:
-    image: docker pull ghcr.io/duoyuya/frp:latest
+    image: ghcr.io/duoyuya/frp:latest
     container_name: frp-panel
     restart: unless-stopped
     ports:
@@ -38,4 +38,3 @@ services:
 volumes:
   frp-data:
   frp-config:
-
