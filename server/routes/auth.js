@@ -2,15 +2,27 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import validator from 'validator';
-import { getDb } from '../db/index.js';
+import { getDb, getSettings } from '../db/index.js';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
 import { sendVerifyEmail, sendResetEmail } from '../utils/email.js';
 
 const router = Router();
 
+// 获取注册设置（公开接口）
+router.get('/settings', (req, res) => {
+  const settings = getSettings();
+  res.json({ allow_register: settings.allow_register });
+});
+
 // 注册
 router.post('/register', async (req, res, next) => {
   try {
+    const settings = getSettings();
+    
+    if (!settings.allow_register) {
+      return res.status(403).json({ error: '注册功能已关闭' });
+    }
+    
     const { email, password } = req.body;
     
     if (!email || !validator.isEmail(email)) {
@@ -28,20 +40,26 @@ router.post('/register', async (req, res, next) => {
     }
 
     const hashedPass = await bcrypt.hash(password, 10);
-    const verifyToken = uuidv4();
     
-    db.prepare(`
-      INSERT INTO users (email, password, verify_token) VALUES (?, ?, ?)
-    `).run(email, hashedPass, verifyToken);
+    // 根据设置决定是否需要邮件验证
+    if (settings.require_email_verify) {
+      const verifyToken = uuidv4();
+      db.prepare('INSERT INTO users (email, password, verify_token) VALUES (?, ?, ?)')
+        .run(email, hashedPass, verifyToken);
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    try {
-      await sendVerifyEmail(email, verifyToken, baseUrl);
-    } catch (emailErr) {
-      console.error('发送验证邮件失败:', emailErr);
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      try {
+        await sendVerifyEmail(email, verifyToken, baseUrl);
+      } catch (emailErr) {
+        console.error('发送验证邮件失败:', emailErr);
+      }
+      res.json({ message: '注册成功，请查收验证邮件' });
+    } else {
+      // 不需要邮件验证，直接激活
+      db.prepare('INSERT INTO users (email, password, is_admin, is_active) VALUES (?, ?, ?, ?)')
+        .run(email, hashedPass, 0, 1);
+      res.json({ message: '注册成功，请登录' });
     }
-
-    res.json({ message: '注册成功，请查收验证邮件' });
   } catch (err) {
     next(err);
   }

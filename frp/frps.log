@@ -1,0 +1,30 @@
+2025-12-06 15:17:50.624 [I] [frps/root.go:105] frps uses config file: /app/frp/frps.toml
+2025-12-06 15:17:50.724 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
+2025-12-06 15:17:50.724 [I] [frps/root.go:114] frps started successfully
+2025-12-06 15:17:50.724 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500
+2025-12-06 15:19:52.232 [I] [server/dashboard_api.go:107] Http request: [/api/serverinfo]
+2025-12-06 15:19:52.233 [I] [server/dashboard_api.go:100] Http response [/api/serverinfo]: code [200]
+2025-12-06 15:23:11.023 [I] [frps/root.go:105] frps uses config file: /app/frp/frps.toml
+2025-12-06 15:23:11.340 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
+2025-12-06 15:23:11.342 [I] [frps/root.go:114] frps started successfully
+2025-12-06 15:23:11.345 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500
+2025-12-06 15:25:35.281 [I] [frps/root.go:105] frps uses config file: /app/frp/frps.toml
+2025-12-06 15:25:35.588 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
+2025-12-06 15:25:35.596 [I] [frps/root.go:114] frps started successfully
+2025-12-06 15:25:35.597 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500
+2025-12-06 15:26:03.153 [I] [server/dashboard_api.go:107] Http request: [/api/serverinfo]
+2025-12-06 15:26:03.156 [I] [server/dashboard_api.go:100] Http response [/api/serverinfo]: code [200]
+2025-12-06 15:27:38.897 [I] [frps/root.go:105] frps uses config file: /app/frp/frps.toml
+2025-12-06 15:27:38.972 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
+2025-12-06 15:27:38.973 [I] [frps/root.go:114] frps started successfully
+2025-12-06 15:27:38.973 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500
+2025-12-06 15:27:40.995 [I] [server/dashboard_api.go:107] Http request: [/api/serverinfo]
+2025-12-06 15:27:41.006 [I] [server/dashboard_api.go:100] Http response [/api/serverinfo]: code [200]
+2025-12-06 15:28:52.822 [I] [frps/root.go:105] frps uses config file: /app/frp/frps.toml
+2025-12-06 15:28:52.937 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
+2025-12-06 15:28:52.938 [I] [frps/root.go:114] frps started successfully
+2025-12-06 15:28:52.938 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500
+2025-12-06 15:32:15.340 [I] [frps/root.go:105] frps uses config file: /app/frp/frps.toml
+2025-12-06 15:32:15.660 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
+2025-12-06 15:32:15.661 [I] [frps/root.go:114] frps started successfully
+2025-12-06 15:32:15.661 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500

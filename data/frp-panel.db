@@ -1,0 +1,23 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "email": "admin@admin.com",
+      "password": "$2a$10$svQdJWmsrctI0KYwLJH.merGwOYyIjBU6HGtDLIs.CPcPqtVzhZn2",
+      "is_admin": 1,
+      "is_active": 1,
+      "verify_token": null,
+      "reset_token": null,
+      "reset_expires": null,
+      "created_at": 1765034273,
+      "updated_at": 1765034273
+    }
+  ],
+  "ports": [],
+  "traffic": [],
+  "_autoId": {
+    "users": 1,
+    "ports": 0,
+    "traffic": 0
+  }
+}

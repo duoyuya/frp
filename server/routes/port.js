@@ -1,29 +1,42 @@
 import { Router } from 'express';
-import { getDb } from '../db/index.js';
+import { getDb, getSettings } from '../db/index.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { updateFrpConfig } from '../utils/frp.js';
+import { updateFrpConfig, generateClientConfig } from '../utils/frp.js';
 
 const router = Router();
 const PORT_MIN = parseInt(process.env.USER_PORT_MIN) || 10000;
 const PORT_MAX = parseInt(process.env.USER_PORT_MAX) || 60000;
-const PORT_LIMIT = parseInt(process.env.USER_PORT_LIMIT) || 5;
 
 router.use(authMiddleware);
 
 // 获取用户端口
 router.get('/', (req, res) => {
   const db = getDb();
-  const ports = db.prepare(`
-    SELECT id, port, name, protocol, is_active, created_at FROM ports WHERE user_id = ?
-  `).all(req.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  const ports = db.prepare('SELECT id, port, name, protocol, local_ip, local_port, is_active, created_at FROM ports WHERE user_id = ?').all(req.user.id);
+  const settings = getSettings();
   
-  res.json({ ports, limit: PORT_LIMIT });
+  res.json({ 
+    ports, 
+    limit: user?.port_limit || 5,
+    server_ip: settings.server_ip || ''
+  });
+});
+
+// 获取配置文件
+router.get('/config', (req, res) => {
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  const ports = db.prepare('SELECT * FROM ports WHERE user_id = ? AND is_active = 1').all(req.user.id);
+  
+  const config = generateClientConfig(user, ports);
+  res.json({ config });
 });
 
 // 申请端口
 router.post('/', (req, res, next) => {
   try {
-    const { port, name, protocol = 'tcp' } = req.body;
+    const { port, name, protocol = 'tcp', local_ip = '127.0.0.1', local_port } = req.body;
     const portNum = parseInt(port);
 
     if (!portNum || portNum < PORT_MIN || portNum > PORT_MAX) {
@@ -35,11 +48,13 @@ router.post('/', (req, res, next) => {
     }
 
     const db = getDb();
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     
     // 检查端口数量限制
     const count = db.prepare('SELECT COUNT(*) as count FROM ports WHERE user_id = ?').get(req.user.id);
-    if (count.count >= PORT_LIMIT) {
-      return res.status(400).json({ error: `最多只能申请 ${PORT_LIMIT} 个端口` });
+    const portLimit = user?.port_limit || 5;
+    if (count.count >= portLimit) {
+      return res.status(400).json({ error: `最多只能申请 ${portLimit} 个端口` });
     }
 
     // 检查端口是否已被占用
@@ -48,15 +63,14 @@ router.post('/', (req, res, next) => {
       return res.status(400).json({ error: '该端口已被占用' });
     }
 
-    const result = db.prepare(`
-      INSERT INTO ports (user_id, port, name, protocol) VALUES (?, ?, ?, ?)
-    `).run(req.user.id, portNum, name || `端口${portNum}`, protocol);
+    const result = db.prepare('INSERT INTO ports (user_id, port, name, protocol, local_ip, local_port) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(req.user.id, portNum, name || `端口${portNum}`, protocol, local_ip, local_port || portNum);
 
     updateFrpConfig();
 
     res.json({ 
       message: '端口申请成功',
-      port: { id: result.lastInsertRowid, port: portNum, name, protocol }
+      port: { id: result.lastInsertRowid, port: portNum, name, protocol, local_ip, local_port: local_port || portNum }
     });
   } catch (err) {
     next(err);
@@ -67,7 +81,7 @@ router.post('/', (req, res, next) => {
 router.put('/:id', (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, is_active } = req.body;
+    const { name, is_active, local_ip, local_port } = req.body;
 
     const db = getDb();
     const port = db.prepare('SELECT * FROM ports WHERE id = ? AND user_id = ?').get(id, req.user.id);
@@ -76,8 +90,8 @@ router.put('/:id', (req, res, next) => {
       return res.status(404).json({ error: '端口不存在' });
     }
 
-    db.prepare('UPDATE ports SET name = ?, is_active = ? WHERE id = ?')
-      .run(name ?? port.name, is_active ?? port.is_active, id);
+    db.prepare('UPDATE ports SET port = ?, name = ?, local_ip = ?, local_port = ?, is_active = ? WHERE id = ?')
+      .run(port.port, name ?? port.name, local_ip ?? port.local_ip, local_port ?? port.local_port, is_active ?? port.is_active, id);
 
     updateFrpConfig();
 

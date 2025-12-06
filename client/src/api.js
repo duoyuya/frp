@@ -27,6 +27,7 @@ export const auth = {
   verify: (token) => request(`/auth/verify?token=${token}`),
   forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
   resetPassword: (token, password) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
+  settings: () => request('/auth/settings'),
 };
 
 export const user = {
@@ -37,20 +38,26 @@ export const user = {
 
 export const ports = {
   list: () => request('/ports'),
-  create: (port, name, protocol) => request('/ports', { method: 'POST', body: JSON.stringify({ port, name, protocol }) }),
+  create: (port, name, protocol, local_ip, local_port) => request('/ports', { method: 'POST', body: JSON.stringify({ port, name, protocol, local_ip, local_port }) }),
   update: (id, data) => request(`/ports/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/ports/${id}`, { method: 'DELETE' }),
   random: () => request('/ports/random'),
+  config: () => request('/ports/config'),
 };
 
 export const admin = {
   users: (page = 1, limit = 20, search = '') => request(`/admin/users?page=${page}&limit=${limit}&search=${search}`),
   userDetail: (id) => request(`/admin/users/${id}`),
+  createUser: (data) => request('/admin/users', { method: 'POST', body: JSON.stringify(data) }),
   updateUser: (id, data) => request(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  userConfig: (id) => request(`/admin/users/${id}/config`),
+  addPort: (userId, data) => request(`/admin/users/${userId}/ports`, { method: 'POST', body: JSON.stringify(data) }),
   updatePort: (userId, portId, data) => request(`/admin/users/${userId}/ports/${portId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePort: (userId, portId) => request(`/admin/users/${userId}/ports/${portId}`, { method: 'DELETE' }),
   stats: () => request('/admin/stats'),
+  getSettings: () => request('/admin/settings'),
+  updateSettings: (data) => request('/admin/settings', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 export const stats = {
