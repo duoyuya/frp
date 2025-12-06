@@ -120,7 +120,7 @@ version: '3.8'
 
 services:
   frp-panel:
-    image: ${IMAGE_PREFIX}/\${GITHUB_USER:-your-username}/frp-panel:latest
+    image: ghcr.io/duoyuya/frp:latest
     container_name: frp-panel
     restart: unless-stopped
     ports:
