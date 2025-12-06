@@ -1,28 +1,71 @@
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 
 let db;
+let SQL;
+const dbPath = process.env.DB_PATH || './data/frp-panel.db';
 
 export function getDb() {
-  return db;
+  return {
+    prepare: (sql) => ({
+      run: (...params) => {
+        db.run(sql, params);
+        return { lastInsertRowid: db.exec("SELECT last_insert_rowid()")[0]?.values[0][0] };
+      },
+      get: (...params) => {
+        const stmt = db.prepare(sql);
+        stmt.bind(params);
+        if (stmt.step()) {
+          const row = stmt.getAsObject();
+          stmt.free();
+          return row;
+        }
+        stmt.free();
+        return undefined;
+      },
+      all: (...params) => {
+        const stmt = db.prepare(sql);
+        stmt.bind(params);
+        const results = [];
+        while (stmt.step()) {
+          results.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return results;
+      }
+    }),
+    exec: (sql) => db.run(sql)
+  };
 }
 
+function saveDb() {
+  const data = db.export();
+  const buffer = Buffer.from(data);
+  fs.writeFileSync(dbPath, buffer);
+}
+
+// 定期保存数据库
+setInterval(saveDb, 30000);
+
 export async function initDatabase() {
-  const dbPath = process.env.DB_PATH || './data/frp-panel.db';
   const dbDir = path.dirname(dbPath);
-  
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
-  db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = NORMAL');
+  SQL = await initSqlJs();
+  
+  if (fs.existsSync(dbPath)) {
+    const buffer = fs.readFileSync(dbPath);
+    db = new SQL.Database(buffer);
+  } else {
+    db = new SQL.Database();
+  }
 
   // 用户表
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
@@ -38,7 +81,7 @@ export async function initDatabase() {
   `);
 
   // 端口表
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS ports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -52,7 +95,7 @@ export async function initDatabase() {
   `);
 
   // 流量统计表
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS traffic_stats (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -66,25 +109,30 @@ export async function initDatabase() {
   `);
 
   // 创建索引
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_traffic_user ON traffic_stats(user_id);
-    CREATE INDEX IF NOT EXISTS idx_traffic_time ON traffic_stats(recorded_at);
-    CREATE INDEX IF NOT EXISTS idx_ports_user ON ports(user_id);
-  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_traffic_user ON traffic_stats(user_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_traffic_time ON traffic_stats(recorded_at)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_ports_user ON ports(user_id)`);
 
   // 创建默认管理员
   const adminEmail = process.env.ADMIN_USERNAME || 'admin';
   const adminPass = process.env.ADMIN_PASSWORD || 'admin123456';
   
-  const existingAdmin = db.prepare('SELECT id FROM users WHERE is_admin = 1').get();
-  if (!existingAdmin) {
+  const stmt = db.prepare('SELECT id FROM users WHERE is_admin = 1');
+  const hasAdmin = stmt.step();
+  stmt.free();
+  
+  if (!hasAdmin) {
     const hashedPass = await bcrypt.hash(adminPass, 10);
-    db.prepare(`
-      INSERT INTO users (email, password, is_admin, is_active) VALUES (?, ?, 1, 1)
-    `).run(adminEmail, hashedPass);
+    db.run('INSERT INTO users (email, password, is_admin, is_active) VALUES (?, ?, 1, 1)', 
+      [adminEmail, hashedPass]);
     console.log('默认管理员已创建');
   }
 
+  saveDb();
   console.log('数据库初始化完成');
-  return db;
+  
+  // 退出时保存
+  process.on('exit', saveDb);
+  process.on('SIGINT', () => { saveDb(); process.exit(); });
+  process.on('SIGTERM', () => { saveDb(); process.exit(); });
 }
