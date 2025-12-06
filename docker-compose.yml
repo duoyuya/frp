@@ -9,32 +9,32 @@ services:
       - "${PANEL_PORT:-3000}:3000"
       - "${FRP_BIND_PORT:-7000}:7000"
       - "${FRP_DASHBOARD_PORT:-7500}:7500"
-      - "${USER_PORT_MIN:-10000}-${USER_PORT_MAX:-60000}:${USER_PORT_MIN:-10000}-${USER_PORT_MAX:-60000}"
+      - "10000-10100:10000-10100"
     volumes:
-      - frp-data:/app/data
-      - frp-config:/app/frp
+      - ./data:/app/data
+      - ./frp:/app/frp
     environment:
       - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=256
       - PORT=3000
       - JWT_SECRET=${JWT_SECRET:-change-this-secret}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123456}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_SECURE=${SMTP_SECURE:-false}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-}
       - FRP_BIND_PORT=${FRP_BIND_PORT:-7000}
       - FRP_TOKEN=${FRP_TOKEN:-change-this-token}
       - FRP_DASHBOARD_PORT=${FRP_DASHBOARD_PORT:-7500}
-      - USER_PORT_MIN=${USER_PORT_MIN:-10000}
-      - USER_PORT_MAX=${USER_PORT_MAX:-60000}
-      - USER_PORT_LIMIT=${USER_PORT_LIMIT:-5}
+      - USER_PORT_MIN=10000
+      - USER_PORT_MAX=10100
+      - USER_PORT_LIMIT=5
       - DB_PATH=/app/data/frp-panel.db
-    mem_limit: 512m
-    cpus: 0.5
-
-volumes:
-  frp-data:
-  frp-config:
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 128M
