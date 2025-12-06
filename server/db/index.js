@@ -7,6 +7,7 @@ let data = {
   users: [], 
   ports: [], 
   traffic: [], 
+  announcements: [],
   settings: { 
     allow_register: true, 
     require_email_verify: false,
@@ -14,7 +15,7 @@ let data = {
     default_port_limit: 5,
     default_bandwidth_limit: 0 // 0表示不限速，单位KB/s
   },
-  _autoId: { users: 0, ports: 0, traffic: 0 } 
+  _autoId: { users: 0, ports: 0, traffic: 0, announcements: 0 } 
 };
 
 function load() {
@@ -31,6 +32,9 @@ function load() {
         default_bandwidth_limit: 0,
         ...loaded.settings 
       };
+      // 确保announcements数组存在
+      if (!data.announcements) data.announcements = [];
+      if (!data._autoId.announcements) data._autoId.announcements = 0;
     }
   } catch (e) {
     console.error('加载数据库失败:', e);
@@ -52,6 +56,11 @@ setInterval(save, 30000);
 // 获取系统设置
 export function getSettings() {
   return data.settings;
+}
+
+// 获取FRP Token
+export function getFrpToken() {
+  return process.env.FRP_TOKEN || 'change-this-token';
 }
 
 // 更新系统设置
@@ -113,6 +122,8 @@ function execSQL(sql, params, mode) {
       });
     } else if (table === 'traffic_stats') {
       data.traffic.push({ id, user_id: params[0], port_id: params[1], upload_bytes: params[2] || 0, download_bytes: params[3] || 0, recorded_at: now });
+    } else if (table === 'announcements') {
+      data.announcements.push({ id, title: params[0], content: params[1], is_active: params[2] ?? 1, created_at: now, updated_at: now });
     }
     save();
     return { lastInsertRowid: id };
@@ -140,6 +151,11 @@ function execSQL(sql, params, mode) {
     } else if (sqlLower.includes('from traffic_stats')) {
       results = [...data.traffic];
       if (sqlLower.includes('user_id =')) results = results.filter(t => t.user_id == params[0]);
+    } else if (sqlLower.includes('from announcements')) {
+      results = [...data.announcements];
+      if (sqlLower.includes('is_active = 1')) results = results.filter(a => a.is_active === 1);
+      if (sqlLower.includes('id =')) results = results.filter(a => a.id == params[0]);
+      results.sort((a, b) => b.created_at - a.created_at);
     }
     
     // COUNT
@@ -165,11 +181,20 @@ function execSQL(sql, params, mode) {
       if (user) {
         if (sqlLower.includes('password =')) user.password = params[0];
         if (sqlLower.includes('is_active =')) user.is_active = params[0];
+        if (sqlLower.includes('is_admin =')) user.is_admin = params[0];
         if (sqlLower.includes('verify_token =')) user.verify_token = params[0];
         if (sqlLower.includes('reset_token =')) { user.reset_token = params[0]; user.reset_expires = params[1]; }
         if (sqlLower.includes('port_limit =')) user.port_limit = params[0];
         if (sqlLower.includes('bandwidth_limit =')) user.bandwidth_limit = params[0];
         user.updated_at = Math.floor(Date.now() / 1000);
+        save();
+      }
+    } else if (table === 'announcements') {
+      const ann = data.announcements.find(a => a.id == params[params.length - 1]);
+      if (ann) {
+        if (params.length === 4) { ann.title = params[0]; ann.content = params[1]; ann.is_active = params[2]; }
+        else if (params.length === 2) { ann.is_active = params[0]; }
+        ann.updated_at = Math.floor(Date.now() / 1000);
         save();
       }
     } else if (table === 'ports') {
@@ -198,9 +223,13 @@ function execSQL(sql, params, mode) {
       data.ports = data.ports.filter(p => p.user_id !== userId);
       data.traffic = data.traffic.filter(t => t.user_id !== userId);
     } else if (sqlLower.includes('from ports')) {
-      data.ports = data.ports.filter(p => p.id != params[0]);
+      const portId = parseInt(params[0]);
+      data.ports = data.ports.filter(p => p.id !== portId);
     } else if (sqlLower.includes('from traffic_stats')) {
       data.traffic = data.traffic.filter(t => t.recorded_at >= params[0]);
+    } else if (sqlLower.includes('from announcements')) {
+      const annId = parseInt(params[0]);
+      data.announcements = data.announcements.filter(a => a.id !== annId);
     }
     save();
     return {};

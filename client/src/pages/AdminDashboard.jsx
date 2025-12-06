@@ -26,11 +26,18 @@ export default function AdminDashboard() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddPortModal, setShowAddPortModal] = useState(false);
-  const [newUser, setNewUser] = useState({ email: '', password: '', is_active: true, port_limit: 5, bandwidth_limit: 0 });
+  const [showResetPwdModal, setShowResetPwdModal] = useState(false);
+  const [showAnnModal, setShowAnnModal] = useState(false);
+  const [newUser, setNewUser] = useState({ email: '', password: '', is_active: true, is_admin: false, port_limit: 5, bandwidth_limit: 0 });
   const [newPort, setNewPort] = useState({ port: '', name: '', protocol: 'tcp', local_ip: '127.0.0.1', local_port: '' });
   const [settings, setSettings] = useState({ allow_register: true, require_email_verify: false, server_ip: '', default_port_limit: 5, default_bandwidth_limit: 0 });
   const [userConfig, setUserConfig] = useState('');
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [resetPwdUserId, setResetPwdUserId] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [announcements, setAnnouncements] = useState([]);
+  const [editAnn, setEditAnn] = useState(null);
+  const [newAnn, setNewAnn] = useState({ title: '', content: '', is_active: true });
 
   const loadOverview = async () => {
     try {
@@ -64,10 +71,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadAnnouncements = async () => {
+    try {
+      const data = await admin.announcements();
+      setAnnouncements(data.announcements || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'overview') loadOverview();
     else if (tab === 'users') loadUsers();
     else if (tab === 'settings') loadSettings();
+    else if (tab === 'announcements') loadAnnouncements();
   }, [tab, hours, page, search]);
 
   const handleSaveSettings = async () => {
@@ -84,9 +101,79 @@ export default function AdminDashboard() {
     try {
       await admin.createUser(newUser);
       setShowCreateModal(false);
-      setNewUser({ email: '', password: '', is_active: true, port_limit: 5, bandwidth_limit: 0 });
+      setNewUser({ email: '', password: '', is_active: true, is_admin: false, port_limit: 5, bandwidth_limit: 0 });
       loadUsers();
       alert('用户创建成功');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (!resetPwdUserId) return;
+    try {
+      await admin.resetPassword(resetPwdUserId, newPassword);
+      setShowResetPwdModal(false);
+      setResetPwdUserId(null);
+      setNewPassword('');
+      alert('密码已重置');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleToggleAdmin = async (userId) => {
+    if (!confirm('确定要更改此用户的管理员权限？')) return;
+    try {
+      await admin.toggleAdmin(userId);
+      loadUsers();
+      if (selectedUser && selectedUser.user.id === userId) {
+        handleViewUser(userId);
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const openResetPwdModal = (userId) => {
+    setResetPwdUserId(userId);
+    setNewPassword('');
+    setShowResetPwdModal(true);
+  };
+
+  // 公告管理
+  const handleCreateAnn = async (e) => {
+    e.preventDefault();
+    try {
+      await admin.createAnnouncement(newAnn);
+      setShowAnnModal(false);
+      setNewAnn({ title: '', content: '', is_active: true });
+      loadAnnouncements();
+      alert('公告创建成功');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleUpdateAnn = async (e) => {
+    e.preventDefault();
+    if (!editAnn) return;
+    try {
+      await admin.updateAnnouncement(editAnn.id, editAnn);
+      setEditAnn(null);
+      loadAnnouncements();
+      alert('公告已更新');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteAnn = async (id) => {
+    if (!confirm('确定删除此公告？')) return;
+    try {
+      await admin.deleteAnnouncement(id);
+      loadAnnouncements();
     } catch (err) {
       alert(err.message);
     }
@@ -194,6 +281,9 @@ export default function AdminDashboard() {
         <button onClick={() => setTab('settings')} className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${tab === 'settings' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
           系统设置
         </button>
+        <button onClick={() => setTab('announcements')} className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${tab === 'announcements' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          公告管理
+        </button>
       </div>
 
       {tab === 'overview' && (
@@ -272,10 +362,12 @@ export default function AdminDashboard() {
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-500">{new Date(u.created_at * 1000).toLocaleDateString()}</td>
                     <td className="py-3 px-4 text-right">
-                      <button onClick={() => handleViewUser(u.id)} className="text-sm text-primary-600 hover:text-primary-700 mr-3">详情</button>
+                      <button onClick={() => handleViewUser(u.id)} className="text-sm text-primary-600 hover:text-primary-700 mr-2">详情</button>
+                      <button onClick={() => openResetPwdModal(u.id)} className="text-sm text-blue-600 hover:text-blue-700 mr-2">重置密码</button>
+                      <button onClick={() => handleToggleAdmin(u.id)} className="text-sm text-purple-600 hover:text-purple-700 mr-2">{u.is_admin ? '取消管理' : '设为管理'}</button>
                       {!u.is_admin && (
                         <>
-                          <button onClick={() => handleToggleUser(u.id, u.is_active)} className="text-sm text-yellow-600 hover:text-yellow-700 mr-3">{u.is_active ? '禁用' : '启用'}</button>
+                          <button onClick={() => handleToggleUser(u.id, u.is_active)} className="text-sm text-yellow-600 hover:text-yellow-700 mr-2">{u.is_active ? '禁用' : '启用'}</button>
                           <button onClick={() => handleDeleteUser(u.id)} className="text-sm text-red-600 hover:text-red-700">删除</button>
                         </>
                       )}
@@ -334,6 +426,39 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {tab === 'announcements' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">公告管理</h2>
+            <button onClick={() => setShowAnnModal(true)} className="btn btn-primary">创建公告</button>
+          </div>
+          {announcements.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">暂无公告</p>
+          ) : (
+            <div className="space-y-4">
+              {announcements.map(ann => (
+                <div key={ann.id} className="p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{ann.title}</h3>
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${ann.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {ann.is_active ? '显示中' : '已隐藏'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditAnn(ann)} className="text-sm text-primary-600 hover:text-primary-700">编辑</button>
+                      <button onClick={() => handleDeleteAnn(ann.id)} className="text-sm text-red-600 hover:text-red-700">删除</button>
+                    </div>
+                  </div>
+                  <p className="text-gray-600 text-sm whitespace-pre-wrap">{ann.content}</p>
+                  <p className="text-gray-400 text-xs mt-2">{new Date(ann.created_at * 1000).toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 创建用户弹窗 */}
       <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="创建用户">
         <form onSubmit={handleCreateUser} className="space-y-4">
@@ -355,10 +480,16 @@ export default function AdminDashboard() {
               <input type="number" value={newUser.bandwidth_limit} onChange={(e) => setNewUser({ ...newUser, bandwidth_limit: parseInt(e.target.value) })} className="input" placeholder="0=不限" />
             </div>
           </div>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={newUser.is_active} onChange={(e) => setNewUser({ ...newUser, is_active: e.target.checked })} className="w-4 h-4 text-primary-600 rounded" />
-            <span className="text-sm text-gray-700">立即激活</span>
-          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={newUser.is_active} onChange={(e) => setNewUser({ ...newUser, is_active: e.target.checked })} className="w-4 h-4 text-primary-600 rounded" />
+              <span className="text-sm text-gray-700">立即激活</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={newUser.is_admin} onChange={(e) => setNewUser({ ...newUser, is_admin: e.target.checked })} className="w-4 h-4 text-purple-600 rounded" />
+              <span className="text-sm text-gray-700">管理员</span>
+            </label>
+          </div>
           <button type="submit" className="btn btn-primary w-full">创建</button>
         </form>
       </Modal>
@@ -470,6 +601,57 @@ export default function AdminDashboard() {
           <pre className="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto max-h-96">{userConfig}</pre>
           <button onClick={copyConfig} className="btn btn-primary w-full">复制配置</button>
         </div>
+      </Modal>
+
+      {/* 重置密码弹窗 */}
+      <Modal isOpen={showResetPwdModal} onClose={() => setShowResetPwdModal(false)} title="重置密码">
+        <form onSubmit={handleResetPassword} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="input" placeholder="至少8位" required />
+          </div>
+          <button type="submit" className="btn btn-primary w-full">重置密码</button>
+        </form>
+      </Modal>
+
+      {/* 公告编辑弹窗 */}
+      <Modal isOpen={!!editAnn} onClose={() => setEditAnn(null)} title="编辑公告">
+        {editAnn && (
+          <form onSubmit={handleUpdateAnn} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">标题</label>
+              <input type="text" value={editAnn.title} onChange={(e) => setEditAnn({ ...editAnn, title: e.target.value })} className="input" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">内容</label>
+              <textarea value={editAnn.content} onChange={(e) => setEditAnn({ ...editAnn, content: e.target.value })} className="input min-h-32" required />
+            </div>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={editAnn.is_active} onChange={(e) => setEditAnn({ ...editAnn, is_active: e.target.checked ? 1 : 0 })} className="w-4 h-4 text-primary-600 rounded" />
+              <span className="text-sm text-gray-700">显示公告</span>
+            </label>
+            <button type="submit" className="btn btn-primary w-full">保存</button>
+          </form>
+        )}
+      </Modal>
+
+      {/* 创建公告弹窗 */}
+      <Modal isOpen={showAnnModal} onClose={() => setShowAnnModal(false)} title="创建公告">
+        <form onSubmit={handleCreateAnn} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">标题</label>
+            <input type="text" value={newAnn.title} onChange={(e) => setNewAnn({ ...newAnn, title: e.target.value })} className="input" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">内容</label>
+            <textarea value={newAnn.content} onChange={(e) => setNewAnn({ ...newAnn, content: e.target.value })} className="input min-h-32" required />
+          </div>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={newAnn.is_active} onChange={(e) => setNewAnn({ ...newAnn, is_active: e.target.checked })} className="w-4 h-4 text-primary-600 rounded" />
+            <span className="text-sm text-gray-700">立即显示</span>
+          </label>
+          <button type="submit" className="btn btn-primary w-full">创建</button>
+        </form>
       </Modal>
     </Layout>
   );

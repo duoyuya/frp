@@ -28,3 +28,17 @@
 2025-12-06 15:32:15.660 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
 2025-12-06 15:32:15.661 [I] [frps/root.go:114] frps started successfully
 2025-12-06 15:32:15.661 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500
+2025-12-06 16:03:48.180 [I] [frps/root.go:105] frps uses config file: /app/frp/frps.toml
+2025-12-06 16:03:48.236 [I] [server/service.go:237] frps tcp listen on 0.0.0.0:7000
+2025-12-06 16:03:48.236 [I] [frps/root.go:114] frps started successfully
+2025-12-06 16:03:48.236 [I] [server/service.go:351] dashboard listen on 0.0.0.0:7500
+2025-12-06 16:04:27.375 [I] [server/dashboard_api.go:107] Http request: [/api/serverinfo]
+2025-12-06 16:04:27.375 [I] [server/dashboard_api.go:100] Http response [/api/serverinfo]: code [200]
+2025-12-06 16:12:09.667 [I] [server/dashboard_api.go:107] Http request: [/api/serverinfo]
+2025-12-06 16:12:09.668 [I] [server/dashboard_api.go:100] Http response [/api/serverinfo]: code [200]
+2025-12-06 16:12:33.722 [I] [server/dashboard_api.go:227] Http request: [/api/proxy/tcp]
+2025-12-06 16:12:33.722 [I] [server/dashboard_api.go:221] Http response [/api/proxy/tcp]: code [200]
+2025-12-06 16:12:34.376 [I] [server/dashboard_api.go:227] Http request: [/api/proxy/udp]
+2025-12-06 16:12:34.376 [I] [server/dashboard_api.go:221] Http response [/api/proxy/udp]: code [200]
+2025-12-06 16:12:35.433 [I] [server/dashboard_api.go:107] Http request: [/api/serverinfo]
+2025-12-06 16:12:35.434 [I] [server/dashboard_api.go:100] Http response [/api/serverinfo]: code [200]

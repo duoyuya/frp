@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { getDb, getSettings } from '../db/index.js';
+import { getDb, getSettings, getFrpToken } from '../db/index.js';
 
 const FRP_CONFIG_PATH = process.env.FRP_CONFIG_PATH || '/app/frp/frps.toml';
 
@@ -70,7 +70,7 @@ export function generateClientConfig(user, ports) {
   const settings = getSettings();
   const serverAddr = settings.server_ip || process.env.SERVER_IP || 'your-server-ip';
   const serverPort = process.env.FRP_BIND_PORT || 7000;
-  const token = process.env.FRP_TOKEN || 'change-this-token';
+  const token = getFrpToken();
   const bandwidthLimit = user.bandwidth_limit || 0;
 
   let config = `# FRP Client Configuration for ${user.email}

@@ -134,6 +134,47 @@ router.get('/me', authMiddleware, (req, res) => {
   });
 });
 
+// 修改密码
+router.post('/change-password', authMiddleware, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: '请输入当前密码和新密码' });
+    }
+    
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: '新密码至少8位' });
+    }
+
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.password);
+    if (!valid) {
+      return res.status(401).json({ error: '当前密码错误' });
+    }
+
+    const hashedPass = await bcrypt.hash(newPassword, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPass, req.user.id);
+
+    res.json({ message: '密码修改成功' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 获取公告列表（公开接口）
+router.get('/announcements', (req, res) => {
+  const db = getDb();
+  const announcements = db.prepare('SELECT id, title, content, created_at FROM announcements WHERE is_active = 1').all() || [];
+  res.json({ announcements });
+});
+
 // 忘记密码
 router.post('/forgot-password', async (req, res, next) => {
   try {

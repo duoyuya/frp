@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import TrafficChart from '../components/TrafficChart';
-import { ports, user } from '../api';
+import { ports, user, auth } from '../api';
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -26,6 +26,9 @@ export default function Dashboard() {
   const [config, setConfig] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [announcements, setAnnouncements] = useState([]);
 
   const loadData = async () => {
     try {
@@ -42,7 +45,16 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => { loadData(); }, [hours]);
+  const loadAnnouncements = async () => {
+    try {
+      const data = await auth.announcements();
+      setAnnouncements(data.announcements || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => { loadData(); loadAnnouncements(); }, [hours]);
 
   const handleRandomPort = async () => {
     try {
@@ -136,8 +148,40 @@ export default function Dashboard() {
     setShowEditModal(true);
   };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+      alert('两次输入的新密码不一致');
+      return;
+    }
+    if (pwdForm.newPassword.length < 8) {
+      alert('新密码至少8位');
+      return;
+    }
+    try {
+      await auth.changePassword(pwdForm.currentPassword, pwdForm.newPassword);
+      setShowPwdModal(false);
+      setPwdForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      alert('密码修改成功');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   return (
     <Layout title="控制面板">
+      {/* 公告区域 */}
+      {announcements.length > 0 && (
+        <div className="mb-6 space-y-3">
+          {announcements.map(ann => (
+            <div key={ann.id} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="font-medium text-blue-800 mb-1">📢 {ann.title}</h3>
+              <p className="text-blue-700 text-sm whitespace-pre-wrap">{ann.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">已用端口</div>
@@ -174,6 +218,9 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">我的端口</h2>
           <div className="flex gap-2">
+            <button onClick={() => setShowPwdModal(true)} className="btn btn-secondary text-sm">
+              修改密码
+            </button>
             <button onClick={handleViewConfig} disabled={portList.length === 0} className="btn btn-secondary text-sm">
               查看配置
             </button>
@@ -304,6 +351,25 @@ export default function Dashboard() {
           <pre className="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto max-h-96">{config}</pre>
           <button onClick={copyConfig} className="btn btn-primary w-full">复制配置</button>
         </div>
+      </Modal>
+
+      {/* 修改密码弹窗 */}
+      <Modal isOpen={showPwdModal} onClose={() => setShowPwdModal(false)} title="修改密码">
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
+            <input type="password" value={pwdForm.currentPassword} onChange={(e) => setPwdForm({ ...pwdForm, currentPassword: e.target.value })} className="input" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+            <input type="password" value={pwdForm.newPassword} onChange={(e) => setPwdForm({ ...pwdForm, newPassword: e.target.value })} className="input" placeholder="至少8位" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+            <input type="password" value={pwdForm.confirmPassword} onChange={(e) => setPwdForm({ ...pwdForm, confirmPassword: e.target.value })} className="input" required />
+          </div>
+          <button type="submit" className="btn btn-primary w-full">修改密码</button>
+        </form>
       </Modal>
     </Layout>
   );

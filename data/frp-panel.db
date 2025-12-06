@@ -11,13 +11,60 @@
       "reset_expires": null,
       "created_at": 1765034273,
       "updated_at": 1765034273
+    },
+    {
+      "id": 2,
+      "email": "beimu@admin.com",
+      "password": "$2a$10$S1Hh9wtbdZnloscvZSbBqODyNKGg4UHvMbfFaTDq1DERZgtEms6.a",
+      "is_admin": 0,
+      "is_active": 1,
+      "verify_token": null,
+      "port_limit": 9,
+      "bandwidth_limit": 0,
+      "reset_token": null,
+      "reset_expires": null,
+      "created_at": 1765037150,
+      "updated_at": 1765037159
+    },
+    {
+      "id": 3,
+      "email": "user@bmcgalx.com",
+      "password": "$2a$10$qZgxovXI2p7f6iGz9QHomOmgBU.cmUbaFiSOsngxj.a2UR5QjGyse",
+      "is_admin": 0,
+      "is_active": 1,
+      "verify_token": null,
+      "port_limit": 6,
+      "bandwidth_limit": 0,
+      "reset_token": null,
+      "reset_expires": null,
+      "created_at": 1765037360,
+      "updated_at": 1765037428
     }
   ],
-  "ports": [],
+  "ports": [
+    {
+      "id": 1,
+      "user_id": 2,
+      "port": 10044,
+      "name": "12",
+      "protocol": "tcp",
+      "local_ip": "127.0.0.1",
+      "local_port": 10044,
+      "is_active": 1,
+      "created_at": 1765037191
+    }
+  ],
   "traffic": [],
+  "settings": {
+    "allow_register": true,
+    "require_email_verify": false,
+    "server_ip": "192.168.1.1",
+    "default_port_limit": 6,
+    "default_bandwidth_limit": 0
+  },
   "_autoId": {
-    "users": 1,
-    "ports": 0,
+    "users": 3,
+    "ports": 2,
     "traffic": 0
   }
 }

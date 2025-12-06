@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { getDb, getSettings, updateSettings } from '../db/index.js';
+import { getDb, getSettings, updateSettings, getFrpToken } from '../db/index.js';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 import { updateFrpConfig, generateClientConfig } from '../utils/frp.js';
 
@@ -30,7 +30,7 @@ router.put('/settings', (req, res) => {
 // 创建用户
 router.post('/users', async (req, res) => {
   try {
-    const { email, password, is_active = true, port_limit, bandwidth_limit } = req.body;
+    const { email, password, is_active = true, is_admin = false, port_limit, bandwidth_limit } = req.body;
     
     if (!email || !email.includes('@')) {
       return res.status(400).json({ error: '请输入有效的邮箱地址' });
@@ -49,7 +49,7 @@ router.post('/users', async (req, res) => {
     const settings = getSettings();
     const hashedPass = await bcrypt.hash(password, 10);
     db.prepare('INSERT INTO users (email, password, is_admin, is_active, verify_token, port_limit, bandwidth_limit) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(email, hashedPass, 0, is_active ? 1 : 0, null, port_limit || settings.default_port_limit, bandwidth_limit || settings.default_bandwidth_limit);
+      .run(email, hashedPass, is_admin ? 1 : 0, is_active ? 1 : 0, null, port_limit || settings.default_port_limit, bandwidth_limit || settings.default_bandwidth_limit);
 
     res.json({ message: '用户创建成功' });
   } catch (err) {
@@ -106,7 +106,7 @@ router.get('/users/:id', (req, res) => {
 // 修改用户
 router.put('/users/:id', (req, res) => {
   const { id } = req.params;
-  const { is_active, port_limit, bandwidth_limit } = req.body;
+  const { is_active, is_admin, port_limit, bandwidth_limit } = req.body;
 
   const db = getDb();
   const user = db.prepare('SELECT id, is_admin FROM users WHERE id = ?').get(id);
@@ -123,6 +123,7 @@ router.put('/users/:id', (req, res) => {
   const userData = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (userData) {
     if (is_active !== undefined) userData.is_active = is_active ? 1 : 0;
+    if (is_admin !== undefined) userData.is_admin = is_admin ? 1 : 0;
     if (port_limit !== undefined) userData.port_limit = parseInt(port_limit);
     if (bandwidth_limit !== undefined) userData.bandwidth_limit = parseInt(bandwidth_limit);
     userData.updated_at = Math.floor(Date.now() / 1000);
@@ -130,6 +131,53 @@ router.put('/users/:id', (req, res) => {
 
   updateFrpConfig();
   res.json({ message: '用户已更新' });
+});
+
+// 重置用户密码
+router.post('/users/:id/reset-password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: '密码至少8位' });
+    }
+
+    const db = getDb();
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+    
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+
+    const hashedPass = await bcrypt.hash(password, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPass, id);
+
+    res.json({ message: '密码已重置' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 设置/取消管理员
+router.post('/users/:id/toggle-admin', (req, res) => {
+  const { id } = req.params;
+
+  const db = getDb();
+  const user = db.prepare('SELECT id, is_admin FROM users WHERE id = ?').get(id);
+  
+  if (!user) {
+    return res.status(404).json({ error: '用户不存在' });
+  }
+
+  // 不能取消自己的管理员权限
+  if (user.id === req.user.id && user.is_admin) {
+    return res.status(400).json({ error: '不能取消自己的管理员权限' });
+  }
+
+  db.prepare('UPDATE users SET is_admin = ? WHERE id = ?').run(user.is_admin ? 0 : 1, id);
+
+  res.json({ message: user.is_admin ? '已取消管理员权限' : '已设为管理员' });
 });
 
 // 删除用户
@@ -271,6 +319,68 @@ router.get('/stats', (req, res) => {
     ports: { total: portCount, active: activePortCount },
     traffic: { upload: totalUpload, download: totalDownload }
   });
+});
+
+// 获取FRP Token (用于客户端配置)
+router.get('/frp-token', (req, res) => {
+  res.json({ token: getFrpToken() });
+});
+
+// ========== 公告管理 ==========
+
+// 获取所有公告
+router.get('/announcements', (req, res) => {
+  const db = getDb();
+  const announcements = db.prepare('SELECT * FROM announcements').all() || [];
+  res.json({ announcements });
+});
+
+// 创建公告
+router.post('/announcements', (req, res) => {
+  const { title, content, is_active = true } = req.body;
+  
+  if (!title || !content) {
+    return res.status(400).json({ error: '标题和内容不能为空' });
+  }
+
+  const db = getDb();
+  const result = db.prepare('INSERT INTO announcements (title, content, is_active) VALUES (?, ?, ?)')
+    .run(title, content, is_active ? 1 : 0);
+
+  res.json({ message: '公告创建成功', id: result.lastInsertRowid });
+});
+
+// 更新公告
+router.put('/announcements/:id', (req, res) => {
+  const { id } = req.params;
+  const { title, content, is_active } = req.body;
+
+  const db = getDb();
+  const ann = db.prepare('SELECT * FROM announcements WHERE id = ?').get(id);
+  
+  if (!ann) {
+    return res.status(404).json({ error: '公告不存在' });
+  }
+
+  db.prepare('UPDATE announcements SET title = ?, content = ?, is_active = ? WHERE id = ?')
+    .run(title ?? ann.title, content ?? ann.content, is_active ?? ann.is_active, id);
+
+  res.json({ message: '公告已更新' });
+});
+
+// 删除公告
+router.delete('/announcements/:id', (req, res) => {
+  const { id } = req.params;
+
+  const db = getDb();
+  const ann = db.prepare('SELECT * FROM announcements WHERE id = ?').get(id);
+  
+  if (!ann) {
+    return res.status(404).json({ error: '公告不存在' });
+  }
+
+  db.prepare('DELETE FROM announcements WHERE id = ?').run(parseInt(id));
+  res.json({ message: '公告已删除' });
 });
 
 export default router;

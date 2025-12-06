@@ -105,15 +105,16 @@ router.put('/:id', (req, res, next) => {
 router.delete('/:id', (req, res, next) => {
   try {
     const { id } = req.params;
+    const portId = parseInt(id);
 
     const db = getDb();
-    const port = db.prepare('SELECT * FROM ports WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const port = db.prepare('SELECT * FROM ports WHERE id = ? AND user_id = ?').get(portId, req.user.id);
     
     if (!port) {
       return res.status(404).json({ error: '端口不存在' });
     }
 
-    db.prepare('DELETE FROM ports WHERE id = ?').run(id);
+    db.prepare('DELETE FROM ports WHERE id = ?').run(portId);
     updateFrpConfig();
 
     res.json({ message: '端口删除成功' });
