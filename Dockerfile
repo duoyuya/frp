@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json ./
-RUN npm install --no-optional
+RUN npm install
 COPY . .
 RUN npm run build
 
@@ -25,8 +25,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/package.json ./
 
-# Install production dependencies
-RUN npm install --omit=dev --no-optional && npm cache clean --force
+# Install production dependencies only
+RUN npm install --omit=dev && npm cache clean --force
 
 # Create directories
 RUN mkdir -p /app/data /app/frp
