@@ -1,4 +1,4 @@
-# FRP Panel - 内网穿透管理平台
+![alt text](image.png)# FRP Panel - 内网穿透管理平台
 
 一个现代化的 FRP 内网穿透管理面板，支持用户注册、端口管理、流量统计等功能。
 
@@ -14,19 +14,18 @@
 ## 快速部署
 
 ```bash
-# 下载
-curl -sSL https://raw.githubusercontent.com/duoyuya/frp/refs/heads/main/install.sh -o install.sh
-# 赋权
-chmod +x install.sh
-# 运行
-sudo ./install.sh
+# 下载部署脚本
+curl -fsSL https://raw.githubusercontent.com/duoyuya/frp-panel/main/install.sh -o install.sh
+
+# 运行安装
+bash install.sh
 ```
 
 ## 手动部署
 
 ```bash
 # 拉取镜像
-docker pull ghcr.io/duoyuya/frp:latest
+docker pull ghcr.io/duoyuya/frp-panel:latest
 
 # 运行
 docker run -d \
@@ -40,7 +39,7 @@ docker run -d \
   -e JWT_SECRET=your-secret \
   -e ADMIN_PASSWORD=your-password \
   -e FRP_TOKEN=your-frp-token \
-  ghcr.io/YOUR_USERNAME/frp-panel:latest
+  ghcr.io/duoyuya/frp-panel:latest
 ```
 
 ## 环境变量
@@ -66,4 +65,3 @@ docker run -d \
 ## License
 
 MIT
-

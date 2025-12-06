@@ -1,8 +1,8 @@
 # Build stage
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+COPY package.json ./
+RUN npm install --no-optional
 COPY . .
 RUN npm run build
 
@@ -10,15 +10,14 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=256"
 
 # Install FRP
 ARG FRP_VERSION=0.58.1
-ARG TARGETARCH
 RUN apk add --no-cache curl && \
-    ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
-    curl -fsSL https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_${ARCH}.tar.gz | tar xz && \
-    mv frp_${FRP_VERSION}_linux_${ARCH}/frps /usr/local/bin/ && \
-    rm -rf frp_${FRP_VERSION}_linux_${ARCH} && \
+    curl -fsSL https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz | tar xz && \
+    mv frp_${FRP_VERSION}_linux_amd64/frps /usr/local/bin/ && \
+    rm -rf frp_${FRP_VERSION}_linux_amd64 && \
     apk del curl
 
 # Copy built files
@@ -26,8 +25,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/package.json ./
 
-# Install production dependencies only
-RUN npm install --omit=dev && npm cache clean --force
+# Install production dependencies
+RUN npm install --omit=dev --no-optional && npm cache clean --force
 
 # Create directories
 RUN mkdir -p /app/data /app/frp
@@ -41,4 +40,4 @@ EXPOSE 3000 7000 7500
 VOLUME ["/app/data", "/app/frp"]
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["node", "server/index.js"]
+CMD ["node", "--max-old-space-size=256", "server/index.js"]

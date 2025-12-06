@@ -1,138 +1,165 @@
-import initSqlJs from 'sql.js';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 
-let db;
-let SQL;
 const dbPath = process.env.DB_PATH || './data/frp-panel.db';
+let data = { users: [], ports: [], traffic: [], _autoId: { users: 0, ports: 0, traffic: 0 } };
+
+function load() {
+  try {
+    if (fs.existsSync(dbPath)) {
+      data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    }
+  } catch (e) {
+    console.error('加载数据库失败:', e);
+  }
+}
+
+function save() {
+  try {
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('保存数据库失败:', e);
+  }
+}
+
+// 定期保存
+setInterval(save, 30000);
 
 export function getDb() {
   return {
     prepare: (sql) => ({
-      run: (...params) => {
-        db.run(sql, params);
-        return { lastInsertRowid: db.exec("SELECT last_insert_rowid()")[0]?.values[0][0] };
-      },
-      get: (...params) => {
-        const stmt = db.prepare(sql);
-        stmt.bind(params);
-        if (stmt.step()) {
-          const row = stmt.getAsObject();
-          stmt.free();
-          return row;
-        }
-        stmt.free();
-        return undefined;
-      },
-      all: (...params) => {
-        const stmt = db.prepare(sql);
-        stmt.bind(params);
-        const results = [];
-        while (stmt.step()) {
-          results.push(stmt.getAsObject());
-        }
-        stmt.free();
-        return results;
-      }
+      run: (...params) => execSQL(sql, params, 'run'),
+      get: (...params) => execSQL(sql, params, 'get'),
+      all: (...params) => execSQL(sql, params, 'all')
     }),
-    exec: (sql) => db.run(sql)
+    exec: () => {}
   };
 }
 
-function saveDb() {
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(dbPath, buffer);
+function execSQL(sql, params, mode) {
+  const sqlLower = sql.toLowerCase().trim();
+  
+  // INSERT
+  if (sqlLower.startsWith('insert into')) {
+    const table = sql.match(/insert into (\w+)/i)?.[1];
+    if (!table || !data[table]) return { lastInsertRowid: 0 };
+    
+    const id = ++data._autoId[table];
+    const now = Math.floor(Date.now() / 1000);
+    
+    if (table === 'users') {
+      data.users.push({ id, email: params[0], password: params[1], is_admin: params[2] || 0, is_active: params[3] || 0, verify_token: params[4] || null, reset_token: null, reset_expires: null, created_at: now, updated_at: now });
+    } else if (table === 'ports') {
+      data.ports.push({ id, user_id: params[0], port: params[1], name: params[2], protocol: params[3] || 'tcp', is_active: 1, created_at: now });
+    } else if (table === 'traffic_stats') {
+      data.traffic.push({ id, user_id: params[0], port_id: params[1], upload_bytes: params[2] || 0, download_bytes: params[3] || 0, recorded_at: now });
+    }
+    save();
+    return { lastInsertRowid: id };
+  }
+  
+  // SELECT
+  if (sqlLower.startsWith('select')) {
+    let results = [];
+    
+    if (sqlLower.includes('from users')) {
+      results = [...data.users];
+      if (sqlLower.includes('where')) {
+        if (sqlLower.includes('email =')) results = results.filter(u => u.email === params[0]);
+        else if (sqlLower.includes('id =')) results = results.filter(u => u.id === params[0]);
+        else if (sqlLower.includes('is_admin = 1')) results = results.filter(u => u.is_admin === 1);
+        else if (sqlLower.includes('verify_token =')) results = results.filter(u => u.verify_token === params[0]);
+        else if (sqlLower.includes('reset_token =')) results = results.filter(u => u.reset_token === params[0] && u.reset_expires > params[1]);
+      }
+    } else if (sqlLower.includes('from ports')) {
+      results = [...data.ports];
+      if (sqlLower.includes('user_id =')) results = results.filter(p => p.user_id === params[0]);
+      else if (sqlLower.includes('port =')) results = results.filter(p => p.port === params[0]);
+      else if (sqlLower.includes('id =') && params.length >= 2) results = results.filter(p => p.id == params[0] && p.user_id == params[1]);
+      else if (sqlLower.includes('id =')) results = results.filter(p => p.id == params[0]);
+    } else if (sqlLower.includes('from traffic_stats')) {
+      results = [...data.traffic];
+      if (sqlLower.includes('user_id =')) results = results.filter(t => t.user_id === params[0]);
+    }
+    
+    // COUNT
+    if (sqlLower.includes('count(*)')) {
+      return mode === 'get' ? { count: results.length } : [{ count: results.length }];
+    }
+    
+    // SUM
+    if (sqlLower.includes('sum(')) {
+      const upload = results.reduce((s, t) => s + (t.upload_bytes || 0), 0);
+      const download = results.reduce((s, t) => s + (t.download_bytes || 0), 0);
+      return mode === 'get' ? { total_upload: upload, total_download: download, upload, download } : [{ total_upload: upload, total_download: download }];
+    }
+    
+    return mode === 'get' ? results[0] : results;
+  }
+  
+  // UPDATE
+  if (sqlLower.startsWith('update')) {
+    const table = sql.match(/update (\w+)/i)?.[1];
+    if (table === 'users') {
+      const user = data.users.find(u => u.id === params[params.length - 1]);
+      if (user) {
+        if (sqlLower.includes('password =')) user.password = params[0];
+        if (sqlLower.includes('is_active =')) user.is_active = params[0];
+        if (sqlLower.includes('verify_token =')) user.verify_token = params[0];
+        if (sqlLower.includes('reset_token =')) { user.reset_token = params[0]; user.reset_expires = params[1]; }
+        user.updated_at = Math.floor(Date.now() / 1000);
+        save();
+      }
+    } else if (table === 'ports') {
+      const port = data.ports.find(p => p.id == params[params.length - 1]);
+      if (port) {
+        if (params.length === 4) { port.port = params[0]; port.name = params[1]; port.is_active = params[2]; }
+        else if (params.length === 3) { port.name = params[0]; port.is_active = params[1]; }
+        save();
+      }
+    }
+    return {};
+  }
+  
+  // DELETE
+  if (sqlLower.startsWith('delete')) {
+    if (sqlLower.includes('from users')) {
+      data.users = data.users.filter(u => u.id !== params[0]);
+      data.ports = data.ports.filter(p => p.user_id !== params[0]);
+      data.traffic = data.traffic.filter(t => t.user_id !== params[0]);
+    } else if (sqlLower.includes('from ports')) {
+      data.ports = data.ports.filter(p => p.id != params[0]);
+    } else if (sqlLower.includes('from traffic_stats')) {
+      data.traffic = data.traffic.filter(t => t.recorded_at >= params[0]);
+    }
+    save();
+    return {};
+  }
+  
+  return mode === 'get' ? undefined : [];
 }
 
-// 定期保存数据库
-setInterval(saveDb, 30000);
-
 export async function initDatabase() {
-  const dbDir = path.dirname(dbPath);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
-  SQL = await initSqlJs();
+  load();
   
-  if (fs.existsSync(dbPath)) {
-    const buffer = fs.readFileSync(dbPath);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
-  }
-
-  // 用户表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      is_admin INTEGER DEFAULT 0,
-      is_active INTEGER DEFAULT 0,
-      verify_token TEXT,
-      reset_token TEXT,
-      reset_expires INTEGER,
-      created_at INTEGER DEFAULT (strftime('%s', 'now')),
-      updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-    )
-  `);
-
-  // 端口表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS ports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      port INTEGER UNIQUE NOT NULL,
-      name TEXT,
-      protocol TEXT DEFAULT 'tcp',
-      is_active INTEGER DEFAULT 1,
-      created_at INTEGER DEFAULT (strftime('%s', 'now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  // 流量统计表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS traffic_stats (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      port_id INTEGER,
-      upload_bytes INTEGER DEFAULT 0,
-      download_bytes INTEGER DEFAULT 0,
-      recorded_at INTEGER DEFAULT (strftime('%s', 'now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (port_id) REFERENCES ports(id) ON DELETE SET NULL
-    )
-  `);
-
-  // 创建索引
-  db.run(`CREATE INDEX IF NOT EXISTS idx_traffic_user ON traffic_stats(user_id)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_traffic_time ON traffic_stats(recorded_at)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_ports_user ON ports(user_id)`);
-
-  // 创建默认管理员
   const adminEmail = process.env.ADMIN_USERNAME || 'admin';
   const adminPass = process.env.ADMIN_PASSWORD || 'admin123456';
   
-  const stmt = db.prepare('SELECT id FROM users WHERE is_admin = 1');
-  const hasAdmin = stmt.step();
-  stmt.free();
-  
-  if (!hasAdmin) {
+  if (!data.users.some(u => u.is_admin === 1)) {
     const hashedPass = await bcrypt.hash(adminPass, 10);
-    db.run('INSERT INTO users (email, password, is_admin, is_active) VALUES (?, ?, 1, 1)', 
-      [adminEmail, hashedPass]);
+    const id = ++data._autoId.users;
+    const now = Math.floor(Date.now() / 1000);
+    data.users.push({ id, email: adminEmail, password: hashedPass, is_admin: 1, is_active: 1, verify_token: null, reset_token: null, reset_expires: null, created_at: now, updated_at: now });
+    save();
     console.log('默认管理员已创建');
   }
-
-  saveDb();
+  
   console.log('数据库初始化完成');
   
-  // 退出时保存
-  process.on('exit', saveDb);
-  process.on('SIGINT', () => { saveDb(); process.exit(); });
-  process.on('SIGTERM', () => { saveDb(); process.exit(); });
+  process.on('exit', save);
+  process.on('SIGINT', () => { save(); process.exit(); });
+  process.on('SIGTERM', () => { save(); process.exit(); });
 }
