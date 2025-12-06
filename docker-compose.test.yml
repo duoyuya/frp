@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # 测试前端构建
+  frontend-test:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: frp-panel-frontend-test
+    command: ["nginx", "-t"]  # 测试nginx配置
+
+  # 测试后端构建
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: frp-panel-backend-test
+    command: ["python", "-c", "print('Backend build successful')"]
+
+  # 测试监控服务构建
+  monitor-test:
+    build:
+      context: ./monitor
+      dockerfile: Dockerfile
+    image: frp-panel-monitor-test
+    command: ["python", "-c", "print('Monitor build successful')"]
