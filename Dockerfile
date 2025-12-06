@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci --prefer-offline
 COPY . .
 RUN npm run build
 
@@ -13,16 +13,18 @@ ENV NODE_ENV=production
 
 # Install FRP
 ARG FRP_VERSION=0.58.1
+ARG TARGETARCH
 RUN apk add --no-cache curl && \
-    curl -fsSL https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz | tar xz && \
-    mv frp_${FRP_VERSION}_linux_amd64/frps /usr/local/bin/ && \
-    rm -rf frp_${FRP_VERSION}_linux_amd64 && \
+    ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
+    curl -fsSL https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_${ARCH}.tar.gz | tar xz && \
+    mv frp_${FRP_VERSION}_linux_${ARCH}/frps /usr/local/bin/ && \
+    rm -rf frp_${FRP_VERSION}_linux_${ARCH} && \
     apk del curl
 
 # Copy built files
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
-COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/package.json ./
 
 # Install production dependencies only
 RUN npm install --omit=dev && npm cache clean --force
