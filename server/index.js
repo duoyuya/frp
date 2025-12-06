@@ -1,8 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -21,34 +19,45 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 安全中间件
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false
-}));
+// 简单安全头
+app.disable('x-powered-by');
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' ? false : ['http://localhost:5173'],
   credentials: true
 }));
 
-// 限流
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: '请求过于频繁，请稍后再试' }
+// 简单限流 (内存友好)
+const rateLimit = new Map();
+app.use('/api/', (req, res, next) => {
+  const ip = req.ip;
+  const now = Date.now();
+  const windowMs = 60000;
+  const max = 60;
+  
+  if (!rateLimit.has(ip)) {
+    rateLimit.set(ip, { count: 1, start: now });
+  } else {
+    const data = rateLimit.get(ip);
+    if (now - data.start > windowMs) {
+      rateLimit.set(ip, { count: 1, start: now });
+    } else if (data.count >= max) {
+      return res.status(429).json({ error: '请求过于频繁' });
+    } else {
+      data.count++;
+    }
+  }
+  next();
 });
-app.use('/api/', limiter);
 
-// 登录限流更严格
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: '登录尝试过多，请15分钟后再试' }
-});
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
+// 定期清理限流记录
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of rateLimit) {
+    if (now - data.start > 60000) rateLimit.delete(ip);
+  }
+}, 60000);
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 
 // API路由
